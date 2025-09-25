@@ -25,7 +25,7 @@ UDP_IP: str = "0.0.0.0"
 UDP_PORT: int = 8888
 
 TTS_URL: str = "http://192.168.1.102:8880/v1/audio/speech"
-VOICE: str = "zf_xiaoxiao"
+VOICE: str = "zf_xiaoyi"
 LANGUAGE: str = "Chinese"
 RESPONSE_FORMAT: str = "pcm"
 
