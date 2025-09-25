@@ -113,13 +113,13 @@ class AudioPlayer:
                     logger.warning(f"Failed to process audio chunk: {e}")
 
         # Save to WAV if audio exists
-        if all_audio:
-            final_audio = np.concatenate(all_audio).astype(np.float32)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_text = "".join(c if c.isalnum() else "_" for c in text)[:30]  # keep filename safe & short
-            filename = os.path.join(OUTPUT_DIR, f"{timestamp}_{safe_text}.wav")
-            write(filename, self.target_sr, final_audio)
-            logger.info(f"💾 Saved audio to {filename}")
+        # if all_audio:
+        #     final_audio = np.concatenate(all_audio).astype(np.float32)
+        #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        #     safe_text = "".join(c if c.isalnum() else "_" for c in text)[:30]  # keep filename safe & short
+        #     filename = os.path.join(OUTPUT_DIR, f"{timestamp}_{safe_text}.wav")
+        #     write(filename, self.target_sr, final_audio)
+        #     logger.info(f"💾 Saved audio to {filename}")
 
 
 # ============================

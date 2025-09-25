@@ -1,0 +1,13 @@
+[Unit]
+Description=Stream TTS
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/ysc/stream_tts/stream.py
+WorkingDirectory=/home/ysc/stream_tts
+Restart=always
+User=ysc
+Environment="PATH=/usr/bin"
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,5 @@
+sudo nano /etc/systemd/system/stream_tts.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable stream_tts.service
+sudo systemctl start stream_tts.service

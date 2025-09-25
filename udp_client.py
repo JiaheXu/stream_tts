@@ -10,7 +10,7 @@ import socket
 # ============================
 # Configuration
 # ============================
-SERVER_IP = "0.0.0.0"   # Change if stream.py runs on another machine
+SERVER_IP = "192.168.1.120"   # Change if stream.py runs on another machine
 SERVER_PORT = 8888
 MESSAGE = "大家好，这是一个UDP测试消息。"
 
