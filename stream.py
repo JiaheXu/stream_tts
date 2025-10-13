@@ -4,11 +4,11 @@ UDP → TTS Audio Streamer with Heartbeat, Commands, Queue, and Multi-Voice
 -------------------------------------------------------------------------
 Commands (JSON over UDP port 8888):
 
-  {"cmd": "speak", "message": "你好", "voice": "zf_xiaoyi", "volume": 2.0}
+  {"cmd": "speak", "text": "你好", "voice": "zf_xiaoyi", "volume": 2.0}
   {"cmd": "set_volume", "volume": 1.5}
   {"cmd": "stop"}
   {"cmd": "start"}
-  {"cmd": "play", "message": "/path/to/audio.wav"}
+  {"cmd": "play", "text": "/path/to/audio.wav"}
 """
 
 import os
@@ -59,7 +59,7 @@ os.makedirs(START_SOUNDS_DIR, exist_ok=True)
 # ============================
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] %(text)s",
 )
 logger = logging.getLogger("UDP-TTS")
 
@@ -224,13 +224,13 @@ class AudioWorker(threading.Thread):
 
     def run(self):
         while True:
-            cmd, message, volume, voice = self.cmd_queue.get()
+            cmd, text, volume, voice = self.cmd_queue.get()
             try:
-                if cmd == "speak" and message:
+                if cmd == "speak" and text:
                     self.audio_player.volume = float(volume)
-                    logger.info(f"🗣️ Speak: '{message}' (vol={self.audio_player.volume}, voice={voice or self.tts_client.default_voice})")
-                    response = self.tts_client.synthesize(message, voice)
-                    self.audio_player.play_and_save_tts(response, message)
+                    logger.info(f"🗣️ Speak: '{text}' (vol={self.audio_player.volume}, voice={voice or self.tts_client.default_voice})")
+                    response = self.tts_client.synthesize(text, voice)
+                    self.audio_player.play_and_save_tts(response, text)
 
                 elif cmd == "set_volume":
                     self.audio_player.volume = float(volume)
@@ -242,8 +242,8 @@ class AudioWorker(threading.Thread):
                 elif cmd == "start":
                     self.audio_player.play_random_start()
 
-                elif cmd == "play" and message:
-                    self.audio_player.play_wav_file(message)
+                elif cmd == "play" and text:
+                    self.audio_player.play_wav_file(text)
 
                 else:
                     logger.warning(f"⚠️ Unknown command: {cmd}")
@@ -277,11 +277,11 @@ class UDPServer:
                     continue
 
                 cmd = payload.get("cmd", "").lower()
-                message = payload.get("message", "")
+                text = payload.get("text", "")
                 volume = payload.get("volume", 2.0)
                 voice = payload.get("voice", None)
 
-                self.cmd_queue.put((cmd, message, volume, voice))
+                self.cmd_queue.put((cmd, text, volume, voice))
             except Exception as e:
                 logger.error(f"UDP error: {e}")
 

@@ -29,7 +29,7 @@ def chat(query: str):
     """Stream LLM output → stream to Kokoro"""
     llm_stream = llm_client.chat.completions.create(
         model="llama2-7b",
-        messages=[{"role": "user", "content": query}],
+        texts=[{"role": "user", "content": query}],
         stream=True
     )
 
