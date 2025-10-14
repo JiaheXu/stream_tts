@@ -26,15 +26,15 @@ def main():
     send_command({"cmd": "play", "text":"start"})   # play random start sound
     time.sleep(2)
     send_command({"cmd": "stop"})  # stop playback
-    time.sleep(1)    
+    #time.sleep(1)    
     send_command({"cmd": "speak", "text": "你好，欢迎来到大唐芙蓉园", "voice": "zf_xiaoyi", "volume": 2.0})
 
     # send_command({"cmd": "stop"})  # stop playback
     
     # send_command({"cmd": "set_volume", "volume": 0.8})
     # time.sleep(1)
-
-    # send_command({"cmd": "speak", "text": "这是第二条测试语音", "voice": "zf_xiaoyi"})
+    #time.sleep(1)    
+    send_command({"cmd": "speak", "text": "这是第二条测试语音", "voice": "zf_xiaoyi"})
     # time.sleep(5)
 
     # send_command({"cmd": "stop"})  # stop playback

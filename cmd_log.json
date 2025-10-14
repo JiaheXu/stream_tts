@@ -1,0 +1,30 @@
+[
+  {
+    "time": "2025-10-13T22:11:37.007394",
+    "cmd": "play",
+    "text": "start",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-13T22:11:39.009553",
+    "cmd": "stop",
+    "text": "",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-13T22:11:39.009962",
+    "cmd": "speak",
+    "text": "你好，欢迎来到大唐芙蓉园",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-13T22:11:39.455910",
+    "cmd": "speak",
+    "text": "这是第二条测试语音",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  }
+]
