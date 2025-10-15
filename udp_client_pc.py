@@ -27,6 +27,7 @@ def main():
     time.sleep(2)
     send_command({"cmd": "stop"})  # stop playback
     #time.sleep(1)    
+    send_command({"cmd": "play", "text":"random"}) 
     send_command({"cmd": "speak", "text": "你好，欢迎来到大唐芙蓉园", "voice": "zf_xiaoyi", "volume": 2.0})
 
     # send_command({"cmd": "stop"})  # stop playback

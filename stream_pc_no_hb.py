@@ -13,7 +13,7 @@ import json
 import queue
 import random 
 from datetime import datetime
-import time
+
 # ============================
 # Config
 # ============================
@@ -28,9 +28,6 @@ SRC_SR = 22050
 TARGET_SR = 48000
 CHANNELS = 1
 VOLUME = 2.0
-HEARTBEAT_HZ: float = 10.0
-NOTIFY_IP: str = "192.168.1.100"
-NOTIFY_PORT: int = 8889
 
 CMD_LOG = "cmd_log.json"
 
@@ -77,10 +74,7 @@ class TTSClient:
 # Audio Player with Queue
 # ============================
 class AudioPlayer(threading.Thread):
-    def __init__(self, target_sr: int = TARGET_SR, channels: int = CHANNELS, 
-                 heartbeat_hz: float = HEARTBEAT_HZ,
-                 notify_ip: str = NOTIFY_IP, 
-                 notify_port: int = NOTIFY_PORT):
+    def __init__(self, target_sr: int = TARGET_SR, channels: int = CHANNELS):
         super().__init__(daemon=True)
         self.target_sr = target_sr
         self.channels = channels
@@ -90,43 +84,6 @@ class AudioPlayer(threading.Thread):
         sd.default.samplerate = self.target_sr
         sd.default.channels = self.channels
 
-        self.heartbeat_hz = heartbeat_hz
-        self.notify_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.notify_addr = (notify_ip, notify_port)
-
-        self._heartbeat_thread = None
-        self._heartbeat_running = False
-
-    def stop(self):
-        logger.info("🛑 Stop requested")
-        self._stop_flag.set()
-
-    def _send_state(self, state: int):
-        """Send heartbeat state (1=playing, 0=idle)."""
-        try:
-            self.notify_sock.sendto(bytes([state]), self.notify_addr)
-        except Exception as e:
-            logger.warning(f"Failed to send state {state}: {e}")
-
-    def _heartbeat_loop(self):
-        period = 1.0 / self.heartbeat_hz
-        while self._heartbeat_running:
-            self._send_state(1)   # keep-alive while playing
-            time.sleep(period)
-
-    def _start_heartbeat(self):
-        if not self._heartbeat_running:
-            self._heartbeat_running = True
-            self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
-            self._heartbeat_thread.start()
-
-    def _stop_heartbeat(self):
-        if self._heartbeat_running:
-            self._heartbeat_running = False
-            if self._heartbeat_thread:
-                self._heartbeat_thread.join(timeout=0.5)
-            self._send_state(0)   # send idle once
-
     def run(self):
         while True:
             audio = self.audio_queue.get()
@@ -135,10 +92,8 @@ class AudioPlayer(threading.Thread):
                     self.audio_queue.task_done()
                     continue
                 self._stop_flag.clear()
-                self._start_heartbeat()
                 self._play_audio_array(audio)
             finally:
-                self._stop_heartbeat()
                 self.audio_queue.task_done()
 
     def _play_audio_array(self, audio: np.ndarray):
@@ -170,7 +125,6 @@ class AudioPlayer(threading.Thread):
         except queue.Empty:
             pass
         logger.info("🧹 Audio queue cleared")
-
 
 
 # ============================
@@ -277,7 +231,7 @@ class UDPServer:
 
                 cmd = payload.get("cmd", "").lower()
                 text = payload.get("text", "")
-                volume = payload.get("volume", 1.2)
+                volume = payload.get("volume", 2.0)
                 voice = payload.get("voice", None)
 
                 self.cmd_queue.put((cmd, text, volume, voice))

@@ -1,26 +1,44 @@
 #!/usr/bin/env python3
 """
-UDP Client Test
----------------
-Sends a text text to UDP server (stream.py) for TTS playback.
+UDP Client Test for stream_pc.py
+--------------------------------
+Sends JSON commands to the TTS UDP server (stream_pc.py).
 """
 
 import socket
+import json
+import time
 
-# ============================
-# Configuration
-# ============================
-SERVER_IP = "192.168.1.120"   # Change if stream.py runs on another machine
+SERVER_IP = "192.168.1.120"   # Change if stream_pc.py runs on another machine
 SERVER_PORT = 8888
-text = "地点：城市中央剧场·水晶厅** ✨ **亮点特色：** 1. 全息投影+真人舞蹈跨界融合，呈现宇宙起源神话 2. 国际获奖团队运用AI实时生成视觉特效 3. 观众可通过座椅扶手的感应装置参与互动段落"
 
-def main():
+def send_command(command: dict):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        sock.sendto(text.encode("utf-8"), (SERVER_IP, SERVER_PORT))
-        print(f"✅ Sent text: {text}")
+        data = json.dumps(command).encode("utf-8")
+        sock.sendto(data, (SERVER_IP, SERVER_PORT))
+        print(f"✅ Sent command: {command}")
     finally:
         sock.close()
+
+def main():
+    # Example sequence of test commands
+    send_command({"cmd": "play", "text":"start"})   # play random start sound
+    time.sleep(2)
+    send_command({"cmd": "stop"})  # stop playback
+    #time.sleep(1)    
+    send_command({"cmd": "play", "text":"random"}) 
+    send_command({"cmd": "speak", "text": "你好，欢迎来到大唐芙蓉园", "voice": "zf_xiaoyi", "volume": 2.0})
+
+    # send_command({"cmd": "stop"})  # stop playback
+    
+    # send_command({"cmd": "set_volume", "volume": 0.8})
+    # time.sleep(1)
+    #time.sleep(1)    
+    send_command({"cmd": "speak", "text": "这是第二条测试语音", "voice": "zf_xiaoyi"})
+    # time.sleep(5)
+
+    # send_command({"cmd": "stop"})  # stop playback
 
 if __name__ == "__main__":
     main()

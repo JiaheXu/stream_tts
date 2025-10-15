@@ -11,8 +11,9 @@ import argparse
 import threading
 import json
 import queue
+import random 
 from datetime import datetime
-
+import time
 # ============================
 # Config
 # ============================
@@ -27,6 +28,9 @@ SRC_SR = 22050
 TARGET_SR = 48000
 CHANNELS = 1
 VOLUME = 2.0
+HEARTBEAT_HZ: float = 10.0
+NOTIFY_IP: str = "0.0.0.0"
+NOTIFY_PORT: int = 8889
 
 CMD_LOG = "cmd_log.json"
 
@@ -73,7 +77,10 @@ class TTSClient:
 # Audio Player with Queue
 # ============================
 class AudioPlayer(threading.Thread):
-    def __init__(self, target_sr: int = TARGET_SR, channels: int = CHANNELS):
+    def __init__(self, target_sr: int = TARGET_SR, channels: int = CHANNELS, 
+                 heartbeat_hz: float = HEARTBEAT_HZ,
+                 notify_ip: str = NOTIFY_IP, 
+                 notify_port: int = NOTIFY_PORT):
         super().__init__(daemon=True)
         self.target_sr = target_sr
         self.channels = channels
@@ -83,6 +90,43 @@ class AudioPlayer(threading.Thread):
         sd.default.samplerate = self.target_sr
         sd.default.channels = self.channels
 
+        self.heartbeat_hz = heartbeat_hz
+        self.notify_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.notify_addr = (notify_ip, notify_port)
+
+        self._heartbeat_thread = None
+        self._heartbeat_running = False
+
+    def stop(self):
+        logger.info("🛑 Stop requested")
+        self._stop_flag.set()
+
+    def _send_state(self, state: int):
+        """Send heartbeat state (1=playing, 0=idle)."""
+        try:
+            self.notify_sock.sendto(bytes([state]), self.notify_addr)
+        except Exception as e:
+            logger.warning(f"Failed to send state {state}: {e}")
+
+    def _heartbeat_loop(self):
+        period = 1.0 / self.heartbeat_hz
+        while self._heartbeat_running:
+            self._send_state(1)   # keep-alive while playing
+            time.sleep(period)
+
+    def _start_heartbeat(self):
+        if not self._heartbeat_running:
+            self._heartbeat_running = True
+            self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+            self._heartbeat_thread.start()
+
+    def _stop_heartbeat(self):
+        if self._heartbeat_running:
+            self._heartbeat_running = False
+            if self._heartbeat_thread:
+                self._heartbeat_thread.join(timeout=0.5)
+            self._send_state(0)   # send idle once
+
     def run(self):
         while True:
             audio = self.audio_queue.get()
@@ -91,8 +135,10 @@ class AudioPlayer(threading.Thread):
                     self.audio_queue.task_done()
                     continue
                 self._stop_flag.clear()
+                self._start_heartbeat()
                 self._play_audio_array(audio)
             finally:
+                self._stop_heartbeat()
                 self.audio_queue.task_done()
 
     def _play_audio_array(self, audio: np.ndarray):
@@ -124,6 +170,7 @@ class AudioPlayer(threading.Thread):
         except queue.Empty:
             pass
         logger.info("🧹 Audio queue cleared")
+
 
 
 # ============================
@@ -169,15 +216,33 @@ class AudioWorker(threading.Thread):
                     self.audio_player.stop_all()
 
                 elif cmd == "play" and text:
-                    path = os.path.join("bgm_wav", text + ".wav")
-                    if os.path.exists(path):
-                        import soundfile as sf
-                        data, sr = sf.read(path, dtype="float32")
-                        if sr != TARGET_SR:
-                            data = resample_poly(data, up=TARGET_SR, down=sr).astype(np.float32)
-                        self.audio_player.enqueue(data)
+                    if text == "random":
+                        folder = "bgm_wav"
+                        try:
+                            files = [f for f in os.listdir(folder) if f.lower().endswith(".wav")]
+                            if not files:
+                                logger.error("❌ No wav files found in bgm_wav")
+                            else:
+                                chosen = random.choice(files)
+                                path = os.path.join(folder, chosen)
+                                logger.info(f"🎲 Random play: {chosen}")
+                                import soundfile as sf
+                                data, sr = sf.read(path, dtype="float32")
+                                if sr != TARGET_SR:
+                                    data = resample_poly(data, up=TARGET_SR, down=sr).astype(np.float32)
+                                self.audio_player.enqueue(data)
+                        except Exception as e:
+                            logger.error(f"Error playing random wav: {e}")
                     else:
-                        logger.error(f"❌ File not found: {path}")
+                        path = os.path.join("bgm_wav", text + ".wav")
+                        if os.path.exists(path):
+                            import soundfile as sf
+                            data, sr = sf.read(path, dtype="float32")
+                            if sr != TARGET_SR:
+                                data = resample_poly(data, up=TARGET_SR, down=sr).astype(np.float32)
+                            self.audio_player.enqueue(data)
+                        else:
+                            logger.error(f"❌ File not found: {path}")
 
                 else:
                     logger.warning(f"⚠️ Unknown command: {cmd}")
@@ -212,7 +277,7 @@ class UDPServer:
 
                 cmd = payload.get("cmd", "").lower()
                 text = payload.get("text", "")
-                volume = payload.get("volume", 2.0)
+                volume = payload.get("volume", 1.2)
                 voice = payload.get("voice", None)
 
                 self.cmd_queue.put((cmd, text, volume, voice))

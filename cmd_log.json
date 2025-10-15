@@ -26,5 +26,145 @@
     "text": "这是第二条测试语音",
     "volume": 2.0,
     "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:18:31.123905",
+    "cmd": "play",
+    "text": "start",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:18:33.126502",
+    "cmd": "stop",
+    "text": "",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:18:33.127299",
+    "cmd": "play",
+    "text": "random",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:18:33.148486",
+    "cmd": "speak",
+    "text": "你好，欢迎来到大唐芙蓉园",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:18:47.416641",
+    "cmd": "speak",
+    "text": "这是第二条测试语音",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:20:56.034221",
+    "cmd": "play",
+    "text": "start",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:20:58.035333",
+    "cmd": "stop",
+    "text": "",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:20:58.035636",
+    "cmd": "play",
+    "text": "random",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:20:58.059005",
+    "cmd": "speak",
+    "text": "你好，欢迎来到大唐芙蓉园",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:20:58.061514",
+    "cmd": "speak",
+    "text": "这是第二条测试语音",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:25:31.550501",
+    "cmd": "play",
+    "text": "start",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:25:45.583322",
+    "cmd": "stop",
+    "text": "",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:25:45.583627",
+    "cmd": "play",
+    "text": "random",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:26:23.181573",
+    "cmd": "speak",
+    "text": "你好，欢迎来到大唐芙蓉园",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:26:28.235471",
+    "cmd": "speak",
+    "text": "这是第二条测试语音",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:34:02.443233",
+    "cmd": "play",
+    "text": "start",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:34:04.445499",
+    "cmd": "stop",
+    "text": "",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:34:04.445860",
+    "cmd": "play",
+    "text": "random",
+    "volume": 2.0,
+    "voice": null
+  },
+  {
+    "time": "2025-10-14T10:34:04.461815",
+    "cmd": "speak",
+    "text": "你好，欢迎来到大唐芙蓉园",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
+  },
+  {
+    "time": "2025-10-14T10:34:04.907019",
+    "cmd": "speak",
+    "text": "这是第二条测试语音",
+    "volume": 2.0,
+    "voice": "zf_xiaoyi"
   }
 ]
