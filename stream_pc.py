@@ -277,7 +277,7 @@ class UDPServer:
 
                 cmd = payload.get("cmd", "").lower()
                 text = payload.get("text", "")
-                volume = payload.get("volume", 2.0)
+                volume = payload.get("volume", 1.2)
                 voice = payload.get("voice", None)
 
                 self.cmd_queue.put((cmd, text, volume, voice))

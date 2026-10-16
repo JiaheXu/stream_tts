@@ -27,8 +27,13 @@ def main():
     time.sleep(2)
     send_command({"cmd": "stop"})  # stop playback
     #time.sleep(1)    
+<<<<<<< HEAD
     #send_command({"cmd": "play", "text":"random"}) 
     send_command({"cmd": "speak", "text": "我不太会唱歌，有时候能哼两句。", "voice": "zf_xiaoyi", "volume": 2.0, "speed": 0.8})
+=======
+    send_command({"cmd": "play", "text":"random"}) 
+    send_command({"cmd": "speak", "text": "你好，欢迎来到大唐芙蓉园", "voice": "zf_xiaoyi", "volume": 2.0})
+>>>>>>> 37141a77d764720c4bc6482609a1fe7adc701697
 
     # send_command({"cmd": "stop"})  # stop playback    
     # send_command({"cmd": "set_volume", "volume": 0.8})
