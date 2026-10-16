@@ -20,7 +20,7 @@ import time
 UDP_IP = "0.0.0.0"
 UDP_PORT = 8888
 
-TTS_URL = "http://192.168.1.100:8880/v1/audio/speech"
+TTS_URL = "http://127.0.0.1:8880/v1/audio/speech"
 VOICE = "zf_xiaoyi"
 LANGUAGE = "Chinese"
 
