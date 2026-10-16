@@ -47,7 +47,7 @@ class HeartbeatReceiver(Node):
         """Publish the current state at fixed 5 Hz."""
         msg = Bool()
         msg.data = self.last_state
-        self.publisher_.publish(msg)
+        # self.publisher_.publish(msg)
 
     def destroy_node(self):
         self._running = False

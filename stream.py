@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""
-UDP → TTS Audio Streamer with Heartbeat, Commands, Queue, and Multi-Voice
--------------------------------------------------------------------------
-Commands (JSON over UDP port 8888):
-
-  {"cmd": "speak", "text": "你好", "voice": "zf_xiaoyi", "volume": 2.0}
-  {"cmd": "set_volume", "volume": 1.5}
-  {"cmd": "stop"}
-  {"cmd": "start"}
-  {"cmd": "play", "text": "/path/to/audio.wav"}
-"""
-
 import os
 import socket
 import logging
@@ -18,100 +6,132 @@ import requests
 import numpy as np
 import sounddevice as sd
 from scipy.signal import resample_poly
-from scipy.io.wavfile import write, read
 from typing import Optional
-from datetime import datetime
 import argparse
 import threading
-import time
 import json
-import random
 import queue
-
+import random 
+from datetime import datetime
+import time
 # ============================
-# Default Configuration
+# Config
 # ============================
-UDP_IP: str = "0.0.0.0"
-UDP_PORT: int = 8888
+UDP_IP = "0.0.0.0"
+UDP_PORT = 8888
 
-TTS_URL: str = "http://192.168.1.100:8880/v1/audio/speech"
-VOICE: str = "zf_xiaoyi"
-LANGUAGE: str = "Chinese"
-RESPONSE_FORMAT: str = "pcm"
+TTS_URL = "http://192.168.1.100:8880/v1/audio/speech"
+VOICE = "zf_xiaoyi"
+LANGUAGE = "Chinese"
 
-SRC_SR: int = 22050
-TARGET_SR: int = 48000
-CHANNELS: int = 1
-
-VOLUME: float = 2.0
+SRC_SR = 22050
+TARGET_SR = 48000
+CHANNELS = 1
+VOLUME = 5.0
 HEARTBEAT_HZ: float = 10.0
-
 NOTIFY_IP: str = "192.168.1.100"
 NOTIFY_PORT: int = 8889
 
-OUTPUT_DIR: str = "output_audio"
-START_SOUNDS_DIR: str = "start_sounds"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(START_SOUNDS_DIR, exist_ok=True)
+CMD_LOG = "cmd_log.json"
 
-# ============================
-# Logging Setup
-# ============================
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(text)s",
+    format="%(asctime)s [%(levelname)s] (%(name)s) %(message)s",
 )
 logger = logging.getLogger("UDP-TTS")
 
 
 # ============================
-# TTS Client
+# TTS Client (in-memory audio)
 # ============================
 class TTSClient:
-    def __init__(self, url: str, voice: str, language: str, response_format: str):
+    def __init__(self, url: str, voice: str, language: str):
         self.url = url
         self.default_voice = voice
         self.language = language
-        self.response_format = response_format
 
-    def synthesize(self, text: str, voice: Optional[str] = None) -> Optional[requests.Response]:
-        """Send text to TTS server with optional voice override."""
+    def synthesize(self, text: str, voice: Optional[str] = None, speed: float = 1.0) -> Optional[np.ndarray]:
+        """Request TTS from fastKokoro with speed control."""
         try:
-            response = requests.post(
-                self.url,
-                json={
-                    "input": text,
-                    "voice": voice if voice else self.default_voice,
-                    "language": self.language,
-                    "response_format": self.response_format,
-                },
-                stream=True,
-                timeout=30,
+            text = text or ""
+            text_preview = text.replace("\n", " ")
+            if len(text_preview) > 120:
+                text_preview = text_preview[:120] + "…"
+            payload = {
+                "input": text,
+                "voice": voice if voice else self.default_voice,
+                "language": self.language,
+                "speed": float(speed),
+                "response_format": "pcm",
+            }
+
+            logger.info(
+                "🎤 TTS request → voice=%s, speed=%s, text_len=%d, text_preview='%s'",
+                payload["voice"],
+                payload["speed"],
+                len(text),
+                text_preview,
             )
+
+            response = requests.post(self.url, json=payload, timeout=30)
             response.raise_for_status()
-            return response
+
+            logger.info(
+                "📥 TTS response → status=%s, bytes=%d, content_type=%s",
+                response.status_code,
+                len(response.content),
+                response.headers.get("content-type", "unknown"),
+            )
+
+            audio = np.frombuffer(response.content, dtype=np.int16).astype(np.float32) / 32768.0
+            audio = np.clip(audio * VOLUME, -1.0, 1.0)
+
+            # Assume Kokoro outputs SRC_SR audio, resample to output device rate
+            if SRC_SR != TARGET_SR:
+                src_samples = len(audio)
+                audio = resample_poly(audio, up=TARGET_SR, down=SRC_SR).astype(np.float32)
+                logger.info(
+                    "🔁 Resample → src_samples=%d (%.2fs @%d), dst_samples=%d (%.2fs @%d)",
+                    src_samples,
+                    src_samples / float(SRC_SR) if SRC_SR else 0.0,
+                    SRC_SR,
+                    len(audio),
+                    len(audio) / float(TARGET_SR) if TARGET_SR else 0.0,
+                    TARGET_SR,
+                )
+            else:
+                logger.info(
+                    "🔊 Audio length → samples=%d (%.2fs @%d)",
+                    len(audio),
+                    len(audio) / float(TARGET_SR) if TARGET_SR else 0.0,
+                    TARGET_SR,
+                )
+
+            return audio
+
         except Exception as e:
             logger.error(f"TTS request failed: {e}")
             return None
 
 
 # ============================
-# Audio Player
+# Audio Player with Queue
 # ============================
-class AudioPlayer:
-    def __init__(self, target_sr: int = TARGET_SR, channels: int = CHANNELS,
-                 volume: float = VOLUME, heartbeat_hz: float = HEARTBEAT_HZ,
-                 notify_ip: str = NOTIFY_IP, notify_port: int = NOTIFY_PORT):
+class AudioPlayer(threading.Thread):
+    def __init__(self, target_sr: int = TARGET_SR, channels: int = CHANNELS, 
+                 heartbeat_hz: float = HEARTBEAT_HZ,
+                 notify_ip: str = NOTIFY_IP, 
+                 notify_port: int = NOTIFY_PORT):
+        super().__init__(daemon=True)
         self.target_sr = target_sr
         self.channels = channels
-        self.volume = volume
-        self.heartbeat_hz = heartbeat_hz
+        self.audio_queue = queue.Queue()
         self._stop_flag = threading.Event()
 
         sd.default.samplerate = self.target_sr
         sd.default.channels = self.channels
 
-        # UDP socket for heartbeat
+        self.heartbeat_hz = heartbeat_hz
         self.notify_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.notify_addr = (notify_ip, notify_port)
 
@@ -123,6 +143,7 @@ class AudioPlayer:
         self._stop_flag.set()
 
     def _send_state(self, state: int):
+        """Send heartbeat state (1=playing, 0=idle)."""
         try:
             self.notify_sock.sendto(bytes([state]), self.notify_addr)
         except Exception as e:
@@ -135,85 +156,65 @@ class AudioPlayer:
             time.sleep(period)
 
     def _start_heartbeat(self):
-        self._heartbeat_running = True
-        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
-        self._heartbeat_thread.start()
+        if not self._heartbeat_running:
+            self._heartbeat_running = True
+            self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+            self._heartbeat_thread.start()
 
     def _stop_heartbeat(self):
-        self._heartbeat_running = False
-        if self._heartbeat_thread:
-            self._heartbeat_thread.join(timeout=0.5)
-        self._send_state(0)
+        if self._heartbeat_running:
+            self._heartbeat_running = False
+            if self._heartbeat_thread:
+                self._heartbeat_thread.join(timeout=0.5)
+            self._send_state(0)
 
-    def play_audio_array(self, audio_data: np.ndarray, samplerate: int):
-        if audio_data is None or len(audio_data) == 0:
+    def run(self):
+        while True:
+            audio = self.audio_queue.get()
+            try:
+                if audio is None:
+                    self.audio_queue.task_done()
+                    continue
+                self._stop_flag.clear()
+                self._start_heartbeat()
+                self._play_audio_array(audio)
+            finally:
+                self._stop_heartbeat()
+                self.audio_queue.task_done()
+
+    def _play_audio_array(self, audio: np.ndarray):
+        if audio is None or len(audio) == 0:
             return
         try:
-            self._stop_flag.clear()
-            self._start_heartbeat()
             with sd.OutputStream(samplerate=self.target_sr, channels=self.channels, dtype="float32") as stream:
-                for i in range(0, len(audio_data), 1024):
+                for i in range(0, len(audio), 1024):
                     if self._stop_flag.is_set():
-                        logger.info("Playback stopped by user.")
+                        logger.info("Playback stopped mid-audio")
                         break
-                    chunk = audio_data[i:i+1024]
-                    stream.write(chunk)
-        finally:
-            self._stop_heartbeat()
+                    stream.write(audio[i:i+1024])
+        except Exception as e:
+            logger.error(f"Error during playback: {e}")
 
-    def play_and_save_tts(self, response: requests.Response, text: str, src_sr: int = SRC_SR):
-        if response is None:
-            return
-        all_audio = []
+    def enqueue(self, audio: np.ndarray):
+        self.audio_queue.put(audio)
+
+    def stop_all(self):
+        logger.info("🛑 Stop requested — clearing audio queue")
+        self._stop_flag.set()
+        self._clear_queue()
+
+    def _clear_queue(self):
         try:
-            self._stop_flag.clear()
-            self._start_heartbeat()
-            with sd.OutputStream(samplerate=self.target_sr, channels=self.channels, dtype="float32") as stream:
-                for chunk in response.iter_content(chunk_size=16384):
-                    if not chunk or self._stop_flag.is_set():
-                        break
-                    try:
-                        audio = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0
-                        audio *= self.volume
-                        audio = np.clip(audio, -1.0, 1.0)
-                        resampled = resample_poly(audio, up=self.target_sr, down=src_sr).astype(np.float32)
-                        stream.write(resampled)
-                        all_audio.append(resampled)
-                    except Exception as e:
-                        logger.warning(f"Failed to process audio chunk: {e}")
-        finally:
-            self._stop_heartbeat()
-        if all_audio:
-            final_audio = np.concatenate(all_audio).astype(np.float32)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_text = "".join(c if c.isalnum() else "_" for c in text)[:30]
-            filename = os.path.join(OUTPUT_DIR, f"{timestamp}_{safe_text}.wav")
-            write(filename, self.target_sr, final_audio)
-            logger.info(f"💾 Saved audio to {filename} (vol={self.volume}x)")
-
-    def play_wav_file(self, filepath: str):
-        if not os.path.exists(filepath):
-            logger.error(f"❌ File not found: {filepath}")
-            return
-        sr, data = read(filepath)
-        if data.dtype != np.float32:
-            data = data.astype(np.float32) / np.iinfo(data.dtype).max
-        if sr != self.target_sr:
-            data = resample_poly(data, up=self.target_sr, down=sr).astype(np.float32)
-        self.play_audio_array(data, self.target_sr)
-
-    def play_random_start(self):
-        files = [f for f in os.listdir(START_SOUNDS_DIR) if f.lower().endswith(".wav")]
-        if not files:
-            logger.warning("No start sounds in start_sounds/")
-            return
-        filepath = os.path.join(START_SOUNDS_DIR, random.choice(files))
-        logger.info(f"▶️ Playing start sound: {filepath}")
-        self.play_wav_file(filepath)
+            while True:
+                self.audio_queue.get_nowait()
+                self.audio_queue.task_done()
+        except queue.Empty:
+            pass
+        logger.info("🧹 Audio queue cleared")
 
 
 # ============================
-# Audio Worker (Queue Consumer)
+# Audio Worker
 # ============================
 class AudioWorker(threading.Thread):
     def __init__(self, tts_client: TTSClient, audio_player: AudioPlayer, cmd_queue: queue.Queue):
@@ -222,31 +223,77 @@ class AudioWorker(threading.Thread):
         self.audio_player = audio_player
         self.cmd_queue = cmd_queue
 
+    def log_command(self, cmd_dict: dict):
+        entry = {"time": datetime.now().isoformat(), **cmd_dict}
+        try:
+            if not os.path.exists(CMD_LOG):
+                with open(CMD_LOG, "w") as f:
+                    json.dump([entry], f, indent=2, ensure_ascii=False)
+            else:
+                with open(CMD_LOG, "r") as f:
+                    data = json.load(f)
+                data.append(entry)
+                with open(CMD_LOG, "w") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Failed to log command: {e}")
+
     def run(self):
         while True:
-            cmd, text, volume, voice = self.cmd_queue.get()
+            cmd, text, volume, voice, speed = self.cmd_queue.get()
             try:
+                self.log_command({
+                    "cmd": cmd,
+                    "text": text,
+                    "volume": volume,
+                    "voice": voice,
+                    "speed": speed
+                })
+
                 if cmd == "speak" and text:
-                    self.audio_player.volume = float(volume)
-                    logger.info(f"🗣️ Speak: '{text}' (vol={self.audio_player.volume}, voice={voice or self.tts_client.default_voice})")
-                    response = self.tts_client.synthesize(text, voice)
-                    self.audio_player.play_and_save_tts(response, text)
+                    logger.info(f"🗣️ Speak: '{text}' | speed={speed}")
+                    audio = self.tts_client.synthesize(text, voice, speed)
+                    if audio is not None:
+                        self.audio_player.enqueue(audio)
 
                 elif cmd == "set_volume":
-                    self.audio_player.volume = float(volume)
-                    logger.info(f"🔊 Volume set to {self.audio_player.volume}x")
+                    logger.info(f"🔊 (Volume set, but not applied in memory mode)")
 
                 elif cmd == "stop":
-                    self.audio_player.stop()
-
-                elif cmd == "start":
-                    self.audio_player.play_random_start()
+                    self.audio_player.stop_all()
 
                 elif cmd == "play" and text:
-                    self.audio_player.play_wav_file(text)
+                    if text == "random":
+                        folder = "bgm_wav"
+                        try:
+                            files = [f for f in os.listdir(folder) if f.lower().endswith(".wav")]
+                            if not files:
+                                logger.error("❌ No wav files found in bgm_wav")
+                            else:
+                                chosen = random.choice(files)
+                                path = os.path.join(folder, chosen)
+                                logger.info(f"🎲 Random play: {chosen}")
+                                import soundfile as sf
+                                data, sr = sf.read(path, dtype="float32")
+                                if sr != TARGET_SR:
+                                    data = resample_poly(data, up=TARGET_SR, down=sr).astype(np.float32)
+                                self.audio_player.enqueue(data)
+                        except Exception as e:
+                            logger.error(f"Error playing random wav: {e}")
+                    else:
+                        path = os.path.join("bgm_wav", text + ".wav")
+                        if os.path.exists(path):
+                            import soundfile as sf
+                            data, sr = sf.read(path, dtype="float32")
+                            if sr != TARGET_SR:
+                                data = resample_poly(data, up=TARGET_SR, down=sr).astype(np.float32)
+                            self.audio_player.enqueue(data)
+                        else:
+                            logger.error(f"❌ File not found: {path}")
 
                 else:
                     logger.warning(f"⚠️ Unknown command: {cmd}")
+
             except Exception as e:
                 logger.error(f"Error handling {cmd}: {e}")
             finally:
@@ -254,7 +301,7 @@ class AudioWorker(threading.Thread):
 
 
 # ============================
-# UDP Listener
+# UDP Server
 # ============================
 class UDPServer:
     def __init__(self, ip: str, port: int, cmd_queue: queue.Queue):
@@ -273,48 +320,40 @@ class UDPServer:
                 try:
                     payload = json.loads(text)
                 except json.JSONDecodeError:
-                    logger.warning(f"Invalid JSON from {addr}: {text}")
+                    logger.warning(f"Invalid JSON: {text}")
                     continue
 
                 cmd = payload.get("cmd", "").lower()
                 text = payload.get("text", "")
                 volume = payload.get("volume", 2.0)
                 voice = payload.get("voice", None)
+                speed = float(payload.get("speed", 1.0))
 
-                self.cmd_queue.put((cmd, text, volume, voice))
+                self.cmd_queue.put((cmd, text, volume, voice, speed))
             except Exception as e:
                 logger.error(f"UDP error: {e}")
 
 
 # ============================
-# Entry Point with CLI
+# Main
 # ============================
 def main():
-    parser = argparse.ArgumentParser(description="UDP → TTS Audio Streamer with Queue & Multi-Voice")
-    parser.add_argument("--volume", type=float, default=VOLUME, help="Default playback volume")
+    parser = argparse.ArgumentParser(description="UDP → Kokoro-TTS Audio Queue Player (speed supported)")
     parser.add_argument("--tts_url", type=str, default=TTS_URL, help="TTS server URL")
     parser.add_argument("--voice", type=str, default=VOICE, help="Default TTS voice")
-    parser.add_argument("--language", type=str, default=LANGUAGE, help="TTS language")
-    parser.add_argument("--port", type=int, default=UDP_PORT, help="UDP port")
-    parser.add_argument("--heartbeat_hz", type=float, default=HEARTBEAT_HZ, help="Heartbeat frequency (Hz)")
-    parser.add_argument("--notify_ip", type=str, default=NOTIFY_IP, help="Heartbeat notify IP")
-    parser.add_argument("--notify_port", type=int, default=NOTIFY_PORT, help="Heartbeat notify port")
     args = parser.parse_args()
 
-    tts_client = TTSClient(args.tts_url, args.voice, args.language, RESPONSE_FORMAT)
-    audio_player = AudioPlayer(volume=args.volume,
-                               heartbeat_hz=args.heartbeat_hz,
-                               notify_ip=args.notify_ip,
-                               notify_port=args.notify_port)
+    tts_client = TTSClient(args.tts_url, args.voice, LANGUAGE)
+    audio_player = AudioPlayer()
+    audio_player.start()
 
     cmd_queue = queue.Queue()
     worker = AudioWorker(tts_client, audio_player, cmd_queue)
     worker.start()
 
-    server = UDPServer(UDP_IP, args.port, cmd_queue)
+    server = UDPServer(UDP_IP, UDP_PORT, cmd_queue)
     server.run()
 
 
 if __name__ == "__main__":
     main()
-

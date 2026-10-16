@@ -1,0 +1,1 @@
+aplay -D plughw:0,0 105.wav
